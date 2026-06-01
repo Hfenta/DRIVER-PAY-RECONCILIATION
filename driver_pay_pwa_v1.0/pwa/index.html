@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Driver Pay v1.0 — Erta Ale LLC</title>
+
+<!-- PWA -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#111110">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Driver Pay">
+<link rel="apple-touch-icon" href="./icons/icon-512.svg">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="application-name" content="Driver Pay">
+<meta name="description" content="Driver payment reconciliation — Erta Ale LLC">
+
+<!-- SheetJS for Excel read/write -->
+<script src="./xlsx.full.min.js"></script>
+
+<style>
+/* System fonts - works offline, no external dependency */
+
+:root {
+  --ink:       #111110;
+  --ink2:      #55534e;
+  --ink3:      #a09e98;
+  --paper:     #faf9f7;
+  --card:      #ffffff;
+  --edge:      #e4e2dc;
+  --edge2:     #ccc9c0;
+  --sage:      #0b6b4c;
+  --sage-bg:   #d6efe6;
+  --cobalt:    #1549a0;
+  --cobalt-bg: #dce8fb;
+  --amber:     #7a4708;
+  --amber-bg:  #fdecd0;
+  --rose:      #991818;
+  --rose-bg:   #fde5e5;
+  --r:         10px;
+  --r-sm:      6px;
+  --mono:      'SF Mono', 'Fira Mono', 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  --sans:      -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--sans);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.55;
+  min-height: 100vh;
+}
+
+/* ─── OFFLINE BANNER ──────────────────── */
+.offline-bar {
+  display: none;
+  background: var(--amber);
+  color: #fff;
+  text-align: center;
+  padding: 7px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: .02em;
+}
+body.offline .offline-bar { display: block; }
+
+/* ─── INSTALL BANNER ──────────────────── */
+.install-banner {
+  display: none;
+  background: var(--sage);
+  color: #fff;
+  padding: 10px 20px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.install-banner.show { display: flex; }
+.install-text { font-size: 13px; font-weight: 500; }
+.install-text span { opacity: .75; font-weight: 400; font-size: 12px; display: block; margin-top: 1px; }
+.install-actions { display: flex; gap: 8px; }
+.install-btn {
+  background: #fff; color: var(--sage);
+  border: none; border-radius: var(--r-sm);
+  padding: 7px 16px; font-size: 12px; font-weight: 700;
+  cursor: pointer; font-family: var(--sans);
+  transition: opacity .15s;
+}
+.install-btn:hover { opacity: .85; }
+.install-dismiss {
+  background: transparent; color: rgba(255,255,255,.6);
+  border: 1px solid rgba(255,255,255,.3); border-radius: var(--r-sm);
+  padding: 7px 12px; font-size: 12px; cursor: pointer;
+  font-family: var(--sans);
+}
+.install-dismiss:hover { color: #fff; border-color: rgba(255,255,255,.7); }
+
+/* ─── HEADER ──────────────────────────── */
+header {
+  background: var(--ink);
+  color: #fff;
+  padding: 0 24px;
+  display: flex;
+  align-items: stretch;
+  border-bottom: 2px solid #2a2926;
+  position: sticky; top: 0; z-index: 50;
+}
+.hd-brand {
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 14px 0; border-right: 1px solid #2e2d2a;
+  padding-right: 20px; margin-right: 20px;
+}
+.hd-brand-name { font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: .1em; }
+.hd-brand-sub  { font-size: 10px; opacity: .4; margin-top: 2px; letter-spacing: .04em; }
+.hd-check { display: flex; flex-direction: column; justify-content: center; padding: 14px 0; }
+.hd-check-lbl { font-family: var(--mono); font-size: 10px; color: #777; }
+.hd-check-val { font-family: var(--mono); font-size: 18px; font-weight: 600; color: #7ef0c0; margin-top: 1px; }
+.hd-version {
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 14px 0 14px 20px; border-left: 1px solid #2e2d2a; margin-left: 16px;
+}
+.ver-badge {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  background: #7ef0c0; color: #0a3d28;
+  padding: 2px 8px; border-radius: 20px; letter-spacing: .06em;
+  cursor: pointer; transition: opacity .15s; display: inline-block;
+  white-space: nowrap;
+}
+.ver-badge:hover { opacity: .8; }
+.ver-date { font-size: 10px; color: #555; margin-top: 3px; font-family: var(--mono); }
+.hd-right { margin-left: auto; display: flex; align-items: center; gap: 6px; padding-left: 12px; }
+.hd-btn {
+  border: 1px solid #3a3936; background: transparent; color: #ccc;
+  border-radius: var(--r-sm); padding: 6px 12px; font-size: 12px;
+  font-family: var(--sans); font-weight: 500; cursor: pointer; transition: all .15s;
+  white-space: nowrap;
+}
+.hd-btn:hover { background: #222; color: #fff; border-color: #555; }
+.hd-btn.primary { background: var(--sage); color: #fff; border-color: var(--sage); }
+.hd-btn.primary:hover { opacity: .85; }
+
+/* ─── LAYOUT ──────────────────────────── */
+.wrap { max-width: 1080px; margin: 0 auto; padding: 28px 16px 80px; }
+
+/* ─── UPLOAD PANEL ───────────────────── */
+.upload-panel {
+  background: var(--card); border: .5px solid var(--edge);
+  border-radius: var(--r); padding: 24px; margin-bottom: 24px;
+}
+.up-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.up-desc  { font-size: 13px; color: var(--ink2); margin-bottom: 18px; }
+.upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+@media (max-width: 540px) { .upload-grid { grid-template-columns: 1fr; } }
+.drop-zone {
+  border: 1.5px dashed var(--edge2); border-radius: var(--r);
+  padding: 22px 16px; text-align: center; cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.drop-zone:hover  { border-color: var(--sage); background: #f5fcf9; }
+.drop-zone.loaded { border-style: solid; border-color: var(--sage); background: #f0faf6; }
+.drop-zone input  { display: none; }
+.dz-ico  { font-size: 26px; margin-bottom: 7px; }
+.dz-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.dz-hint { font-size: 11px; color: var(--ink2); line-height: 1.5; }
+.dz-file { font-family: var(--mono); font-size: 11px; color: var(--sage); margin-top: 6px; font-weight: 500; display: none; }
+.run-btn {
+  width: 100%; background: var(--ink); color: #fff; border: none;
+  border-radius: var(--r); padding: 12px; font-size: 14px; font-weight: 600;
+  font-family: var(--sans); cursor: pointer; letter-spacing: .02em; transition: opacity .15s;
+}
+.run-btn:disabled { opacity: .3; cursor: not-allowed; }
+.run-btn:not(:disabled):hover { opacity: .82; }
+.err-box {
+  background: var(--rose-bg); border: .5px solid #f5a0a0; border-radius: var(--r-sm);
+  padding: 10px 14px; font-size: 13px; color: var(--rose); margin-top: 10px; display: none;
+}
+
+/* ─── METRICS ─────────────────────────── */
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 22px; }
+.met { background: var(--card); border: .5px solid var(--edge); border-radius: var(--r); padding: 14px 16px; }
+.met-lbl { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--ink2); margin-bottom: 5px; }
+.met-val { font-family: var(--mono); font-size: 22px; font-weight: 600; color: var(--ink); }
+.met-val.sage   { color: var(--sage); }
+.met-val.cobalt { color: var(--cobalt); }
+.met-val.amber  { color: var(--amber); }
+
+/* ─── TOOLBAR ─────────────────────────── */
+.toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 8px; flex-wrap: wrap; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tab {
+  padding: 6px 14px; border-radius: var(--r-sm); font-size: 12px; font-weight: 500;
+  font-family: var(--sans); cursor: pointer; border: .5px solid var(--edge2);
+  background: var(--card); color: var(--ink2); transition: all .12s;
+}
+.tab.on  { background: var(--ink); color: #fff; border-color: var(--ink); }
+.tab:hover:not(.on) { background: var(--paper); color: var(--ink); }
+.tools { display: flex; gap: 6px; }
+.tool-btn {
+  border: .5px solid var(--edge2); background: var(--card); border-radius: var(--r-sm);
+  padding: 6px 12px; font-size: 12px; font-weight: 500; font-family: var(--sans);
+  cursor: pointer; color: var(--ink); transition: background .1s;
+}
+.tool-btn:hover { background: var(--paper); }
+
+/* ─── SEARCH ──────────────────────────── */
+.search-wrap { margin-bottom: 12px; position: relative; }
+.search-wrap input {
+  width: 100%; padding: 9px 14px 9px 36px; font-size: 13px; font-family: var(--sans);
+  border: .5px solid var(--edge2); border-radius: var(--r-sm);
+  background: var(--card); color: var(--ink);
+}
+.search-wrap input:focus { outline: none; border-color: var(--sage); box-shadow: 0 0 0 3px rgba(11,107,76,.12); }
+.search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); font-size: 13px; pointer-events: none; opacity: .35; }
+
+/* ─── NOTICE ──────────────────────────── */
+.notice { background: var(--amber-bg); border: .5px solid #f5c842; border-radius: var(--r-sm); padding: 11px 14px; font-size: 13px; color: var(--amber); margin-bottom: 18px; line-height: 1.6; }
+
+/* ─── DRIVER CARDS ───────────────────── */
+.driver-card { background: var(--card); border: .5px solid var(--edge); border-radius: var(--r); margin-bottom: 10px; overflow: hidden; transition: box-shadow .15s; }
+.driver-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.06); }
+.dc-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; cursor: pointer; user-select: none; }
+.dc-head:hover { background: var(--paper); }
+.dc-av { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 700; font-size: 12px; flex-shrink: 0; }
+.av-sage   { background: var(--sage-bg);   color: var(--sage); }
+.av-cobalt { background: var(--cobalt-bg); color: var(--cobalt); }
+.av-amber  { background: var(--amber-bg);  color: var(--amber); }
+.av-grey   { background: var(--paper);     color: var(--ink2); }
+.dc-info .dc-name { font-weight: 600; font-size: 14px; }
+.dc-info .dc-meta { font-size: 12px; color: var(--ink2); margin-top: 3px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.dc-amount { margin-left: auto; text-align: right; flex-shrink: 0; }
+.dc-total  { font-family: var(--mono); font-size: 20px; font-weight: 600; }
+.dc-total.sage   { color: var(--sage); }
+.dc-total.cobalt { color: var(--cobalt); }
+.dc-total.amber  { color: var(--amber); }
+.dc-total.grey   { color: var(--ink2); }
+.dc-sub    { font-size: 11px; color: var(--ink3); margin-top: 2px; }
+.dc-chv { font-size: 11px; color: var(--ink3); margin-left: 10px; transition: transform .2s; display: inline-block; }
+.dc-chv.o { transform: rotate(90deg); }
+.dc-body { display: none; border-top: .5px solid var(--edge); }
+.dc-body.o { display: block; }
+
+/* ─── TRIP TABLE ──────────────────────── */
+.scroll-x { overflow-x: auto; }
+.trip-table { width: 100%; font-size: 12px; border-collapse: collapse; min-width: 600px; }
+.trip-table th { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--ink2); padding: 8px 14px; text-align: left; background: var(--paper); border-bottom: .5px solid var(--edge); white-space: nowrap; }
+.trip-table td { padding: 8px 14px; border-bottom: .5px solid var(--edge); color: var(--ink); white-space: nowrap; }
+.trip-table tr:last-child td { border-bottom: none; }
+.trip-table tr:hover td { background: var(--paper); }
+.mono-cell { font-family: var(--mono); font-size: 11px; color: var(--ink2); }
+.amt-cell  { font-family: var(--mono); font-weight: 600; color: var(--sage); }
+.dim-cell  { color: var(--ink2); font-size: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.dc-foot { background: var(--paper); border-top: .5px solid var(--edge); padding: 8px 14px; display: flex; justify-content: space-between; font-size: 12px; color: var(--ink2); }
+.dc-foot strong { font-family: var(--mono); color: var(--ink); font-weight: 600; }
+
+/* ─── BADGES ──────────────────────────── */
+.bdg { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; }
+.bdg-sage   { background: var(--sage-bg);   color: var(--sage); }
+.bdg-amber  { background: var(--amber-bg);  color: var(--amber); }
+.bdg-rose   { background: var(--rose-bg);   color: var(--rose); }
+.bdg-grey   { background: var(--paper); color: var(--ink2); border: .5px solid var(--edge); }
+
+/* ─── SUMMARY ─────────────────────────── */
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.summ-card { background: var(--card); border: .5px solid var(--edge); border-radius: var(--r); padding: 20px; }
+.summ-driver { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.summ-total  { font-family: var(--mono); font-size: 28px; font-weight: 600; color: var(--sage); margin: 8px 0; }
+.summ-detail { font-size: 12px; color: var(--ink2); line-height: 1.8; }
+
+/* ─── MEMBER TABLE ───────────────────── */
+.tbl-card { background: var(--card); border: .5px solid var(--edge); border-radius: var(--r); overflow: hidden; }
+.mem-table { width: 100%; font-size: 13px; border-collapse: collapse; min-width: 480px; }
+.mem-table th { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--ink2); padding: 10px 14px; text-align: left; background: var(--paper); border-bottom: .5px solid var(--edge); }
+.mem-table td { padding: 9px 14px; border-bottom: .5px solid var(--edge); }
+.mem-table tr:last-child td { border-bottom: none; }
+.mem-table tr:hover td { background: var(--paper); }
+
+/* ─── EXPORT DROPDOWN ────────────────── */
+.export-wrap { position: relative; display: inline-block; }
+.export-menu {
+  display: none; position: absolute; right: 0; top: calc(100% + 6px);
+  background: var(--card); border: .5px solid var(--edge2); border-radius: var(--r);
+  box-shadow: 0 8px 24px rgba(0,0,0,.12); min-width: 190px; z-index: 100; overflow: hidden;
+}
+.export-menu.open { display: block; }
+.export-menu-item {
+  display: flex; align-items: center; gap: 10px; padding: 11px 16px; cursor: pointer;
+  font-size: 13px; color: var(--ink); font-family: var(--sans); font-weight: 500;
+  transition: background .1s; border: none; background: none; width: 100%; text-align: left;
+}
+.export-menu-item:hover { background: var(--paper); }
+.em-icon { font-size: 16px; }
+.em-desc { font-size: 11px; color: var(--ink2); font-weight: 400; }
+.export-menu-divider { height: .5px; background: var(--edge); }
+
+/* ─── VERSION / CHANGELOG ────────────── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55);
+  z-index: 999; align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--card); border-radius: var(--r);
+  width: 540px; max-width: 95vw; max-height: 85vh;
+  overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.3);
+  animation: fadeUp .2s ease;
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 22px; border-bottom: .5px solid var(--edge);
+  position: sticky; top: 0; background: var(--card); z-index: 1;
+}
+.modal-head h2 { font-size: 15px; font-weight: 600; }
+.modal-close { background: none; border: none; cursor: pointer; font-size: 20px; color: var(--ink2); padding: 2px 6px; border-radius: 4px; line-height: 1; }
+.modal-close:hover { background: var(--paper); }
+.modal-body { padding: 20px 22px; }
+.cl-version { margin-bottom: 24px; }
+.cl-ver-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.cl-ver-num { font-family: var(--mono); font-size: 13px; font-weight: 700; background: var(--ink); color: #7ef0c0; padding: 3px 10px; border-radius: 20px; }
+.cl-ver-num.current { background: var(--sage); color: #fff; }
+.cl-ver-date { font-size: 12px; color: var(--ink2); font-family: var(--mono); }
+.cl-ver-tag { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px; background: var(--sage-bg); color: var(--sage); margin-left: auto; }
+.cl-items { list-style: none; padding: 0; }
+.cl-items li { font-size: 13px; color: var(--ink2); padding: 5px 0; border-bottom: .5px solid var(--edge); display: flex; gap: 8px; align-items: flex-start; line-height: 1.5; }
+.cl-items li:last-child { border-bottom: none; }
+.cl-items li::before { content: '→'; color: var(--sage); font-weight: 700; flex-shrink: 0; }
+
+/* ─── ANIMATION ──────────────────────── */
+.fade-in { animation: fadeUp .3s ease; }
+@keyframes fadeUp { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: none; } }
+
+/* ─── HIDDEN ──────────────────────────── */
+#results { display: none; }
+.page { display: none; }
+.page.on { display: block; }
+
+/* ─── MOBILE TWEAKS ──────────────────── */
+@media (max-width: 480px) {
+  header { padding: 0 12px; }
+  .hd-brand-name { font-size: 10px; }
+  .hd-check-val { font-size: 15px; }
+  .hd-version { display: none; }
+  .wrap { padding: 16px 10px 60px; }
+  .upload-panel { padding: 16px; }
+  .dc-head { padding: 12px 14px; gap: 10px; }
+  .dc-total { font-size: 17px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Offline indicator -->
+<div class="offline-bar">⚡ You're offline — the app still works fully with your uploaded files</div>
+
+<!-- Install banner -->
+<div class="install-banner" id="install-banner">
+  <div class="install-text">
+    Install Driver Pay on this device
+    <span>Works offline · No app store needed · Opens like a native app</span>
+  </div>
+  <div class="install-actions">
+    <button class="install-btn" id="install-btn">Install App</button>
+    <button class="install-dismiss" id="install-dismiss">Not now</button>
+  </div>
+</div>
+
+<!-- Header -->
+<header>
+  <div class="hd-brand">
+    <div class="hd-brand-name">ERTA ALE LLC</div>
+    <div class="hd-brand-sub">DRIVER PAY · RECONCILIATION</div>
+  </div>
+  <div class="hd-check">
+    <div class="hd-check-lbl">CHECK AMOUNT</div>
+    <div class="hd-check-val" id="hd-total">—</div>
+  </div>
+  <div class="hd-version">
+    <span class="ver-badge" onclick="openChangelog()">v1.0</span>
+    <div class="ver-date">2026-05-28</div>
+  </div>
+  <div class="hd-right">
+    <div class="export-wrap" id="hd-export-wrap">
+      <button class="hd-btn" onclick="toggleExportMenu('hd-export-menu')">↓ Export ▾</button>
+      <div class="export-menu" id="hd-export-menu">
+        <button class="export-menu-item" onclick="doExportCSV(); closeAllMenus()">
+          <span class="em-icon">📄</span>
+          <span><div>Download CSV</div><div class="em-desc">Flat file, all trips</div></span>
+        </button>
+        <div class="export-menu-divider"></div>
+        <button class="export-menu-item" onclick="doExportXLSX(); closeAllMenus()">
+          <span class="em-icon">📊</span>
+          <span><div>Download Excel (.xlsx)</div><div class="em-desc">Formatted, per-driver sheets</div></span>
+        </button>
+      </div>
+    </div>
+    <button class="hd-btn primary" onclick="window.print()">Print</button>
+  </div>
+</header>
+
+<!-- Changelog Modal -->
+<div class="modal-overlay" id="changelog-modal" onclick="if(event.target===this)closeChangelog()">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Version History</h2>
+      <button class="modal-close" onclick="closeChangelog()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="cl-version">
+        <div class="cl-ver-row">
+          <span class="cl-ver-num current">v1.0</span>
+          <span class="cl-ver-date">2026-05-28</span>
+          <span class="cl-ver-tag">Current · PWA</span>
+        </div>
+        <ul class="cl-items">
+          <li>Upload Claims (.xlsx/.csv) + Remittance (.xlsx/.csv) files</li>
+          <li>3-layer trip matching: Trip Number → Member + Date → Member name</li>
+          <li>Auto-detects column names across different file formats</li>
+          <li>Driver cards with expandable per-trip breakdown</li>
+          <li>Pay Summary tab — total, avg/trip, members served, date range</li>
+          <li>Unassigned Members tab for trips with no driver in claims</li>
+          <li>Summary metrics: check total, matched trips, need assignment</li>
+          <li>Search by driver name or member across all cards</li>
+          <li>Expand All / Collapse All trip cards</li>
+          <li>Export CSV — flat file with subtotals per driver</li>
+          <li>Export Excel (.xlsx) — Summary + All Trips + per-driver sheets</li>
+          <li>Print support via browser print dialog</li>
+          <li>PWA — installable, works offline, sticky header, mobile-optimized</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- Upload Panel -->
+  <div class="upload-panel" id="upload-panel">
+    <div class="up-title">Upload Files to Calculate Driver Pay</div>
+    <div class="up-desc">Upload the Claims file and Remittance file. The app matches trips by Trip Number, then by member name + appointment date, and calculates each driver's earnings.</div>
+    <div class="upload-grid">
+      <div class="drop-zone" id="dz-claims" onclick="document.getElementById('inp-claims').click()">
+        <input type="file" id="inp-claims" accept=".xlsx,.xls,.csv">
+        <div class="dz-ico">📋</div>
+        <div class="dz-name">Claims File</div>
+        <div class="dz-hint">Trip Number · Member Info · Driver · Claim Status · Cost</div>
+        <div class="dz-file" id="lbl-claims"></div>
+      </div>
+      <div class="drop-zone" id="dz-rem" onclick="document.getElementById('inp-rem').click()">
+        <input type="file" id="inp-rem" accept=".xlsx,.xls,.csv">
+        <div class="dz-ico">💳</div>
+        <div class="dz-name">Remittance File</div>
+        <div class="dz-hint">Trip Leg · Payment Amount · Member First/Last Name · Appt Date</div>
+        <div class="dz-file" id="lbl-rem"></div>
+      </div>
+    </div>
+    <button class="run-btn" id="run-btn" disabled onclick="runReconciliation()">Match &amp; Calculate Driver Payments</button>
+    <div class="err-box" id="err-box"></div>
+  </div>
+
+  <!-- Results -->
+  <div id="results">
+    <div class="notice" id="notice-box" style="display:none"></div>
+    <div class="metrics" id="metrics"></div>
+    <div class="toolbar">
+      <div class="tabs">
+        <button class="tab on" onclick="switchTab('drivers', this)">By Driver</button>
+        <button class="tab" onclick="switchTab('summary', this)">Pay Summary</button>
+        <button class="tab" onclick="switchTab('unassigned', this)">Unassigned</button>
+      </div>
+      <div class="tools">
+        <button class="tool-btn" onclick="expandAll()">Expand All</button>
+        <button class="tool-btn" onclick="collapseAll()">Collapse All</button>
+        <div class="export-wrap" id="tb-export-wrap">
+          <button class="tool-btn" style="font-weight:600" onclick="toggleExportMenu('tb-export-menu')">↓ Export ▾</button>
+          <div class="export-menu" id="tb-export-menu">
+            <button class="export-menu-item" onclick="doExportCSV(); closeAllMenus()">
+              <span class="em-icon">📄</span>
+              <span><div>Download CSV</div><div class="em-desc">Flat file, all trips</div></span>
+            </button>
+            <div class="export-menu-divider"></div>
+            <button class="export-menu-item" onclick="doExportXLSX(); closeAllMenus()">
+              <span class="em-icon">📊</span>
+              <span><div>Download Excel (.xlsx)</div><div class="em-desc">Formatted, per-driver sheets</div></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page on" id="page-drivers">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input id="srch" placeholder="Search by driver name or member…" oninput="renderDriverCards()">
+      </div>
+      <div id="cards-container"></div>
+    </div>
+
+    <div class="page" id="page-summary">
+      <div class="summary-grid" id="summ-grid"></div>
+    </div>
+
+    <div class="page" id="page-unassigned">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input id="msrch" placeholder="Search member name…" oninput="renderMembers()">
+      </div>
+      <div class="tbl-card">
+        <div class="scroll-x">
+          <table class="mem-table">
+            <thead><tr><th>Member</th><th>Trips</th><th>Total</th><th>Miles</th><th>Dates</th><th>Plan</th></tr></thead>
+            <tbody id="mem-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ─── PWA: SERVICE WORKER ──────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => {
+        console.log('[PWA] Service worker registered:', reg.scope);
+        // Check for updates
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // New version available — could show a toast here in v2
+              console.log('[PWA] New version available');
+            }
+          });
+        });
+      })
+      .catch(err => console.warn('[PWA] SW registration failed:', err));
+  });
+}
+
+// ─── PWA: OFFLINE DETECTION ───────────────────────────────────────
+function updateOnlineStatus() {
+  document.body.classList.toggle('offline', !navigator.onLine);
+}
+window.addEventListener('online',  updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+updateOnlineStatus();
+
+// ─── PWA: INSTALL PROMPT ──────────────────────────────────────────
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('install-banner').classList.add('show');
+});
+document.getElementById('install-btn').addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  console.log('[PWA] Install outcome:', outcome);
+  deferredPrompt = null;
+  document.getElementById('install-banner').classList.remove('show');
+});
+document.getElementById('install-dismiss').addEventListener('click', () => {
+  document.getElementById('install-banner').classList.remove('show');
+});
+window.addEventListener('appinstalled', () => {
+  document.getElementById('install-banner').classList.remove('show');
+  console.log('[PWA] App installed');
+});
+
+// ─── STATE ────────────────────────────────────────────────────────
+let claimsData = null, remData = null, state = {};
+
+// ─── FILE READING ─────────────────────────────────────────────────
+function readXLSX(file, cb) {
+  const fr = new FileReader();
+  fr.onload = e => { try { cb(null, XLSX.read(e.target.result, { type: 'binary' })); } catch(err) { cb(err); } };
+  fr.readAsBinaryString(file);
+}
+function sheetToRows(ws) { return XLSX.utils.sheet_to_json(ws, { defval: '' }); }
+
+function parseRemittance(wb) {
+  let allRows = [], meta = {};
+  for (const sn of wb.SheetNames) {
+    const raw = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: null });
+    for (const row of raw) {
+      if (row[7] === 'Check Number') meta.check    = row[8];
+      if (row[7] === 'Paid Date')    meta.paidDate = row[8];
+      if (row[7] === 'Check Amount') meta.amount   = row[8];
+    }
+    const hdrIdx = raw.findIndex(r => r[0] === 'Trip Leg');
+    if (hdrIdx === -1) continue;
+    const hdrs = raw[hdrIdx];
+    for (let i = hdrIdx + 1; i < raw.length; i++) {
+      const r = raw[i];
+      if (!r[0] || String(r[0]).trim().length < 3) continue;
+      const obj = {};
+      hdrs.forEach((h, j) => { obj[h] = r[j] ?? ''; });
+      const amt = parseFloat(String(obj['Payment Amount'] || '0').replace(/[^0-9.\-]/g, ''));
+      if (amt > 0) allRows.push(obj);
+    }
+  }
+  return { rows: allRows, meta };
+}
+
+function parseClaims(wb) {
+  return sheetToRows(wb.Sheets[wb.SheetNames[0]]);
+}
+
+document.getElementById('inp-claims').addEventListener('change', function() {
+  if (!this.files[0]) return;
+  readXLSX(this.files[0], (err, wb) => {
+    if (err) { showErr('Claims file could not be read: ' + err.message); return; }
+    claimsData = parseClaims(wb);
+    document.getElementById('dz-claims').classList.add('loaded');
+    const lbl = document.getElementById('lbl-claims');
+    lbl.textContent = '✓ ' + this.files[0].name; lbl.style.display = 'block';
+    checkReady();
+  });
+});
+document.getElementById('inp-rem').addEventListener('change', function() {
+  if (!this.files[0]) return;
+  readXLSX(this.files[0], (err, wb) => {
+    if (err) { showErr('Remittance file could not be read: ' + err.message); return; }
+    remData = parseRemittance(wb);
+    document.getElementById('dz-rem').classList.add('loaded');
+    const lbl = document.getElementById('lbl-rem');
+    lbl.textContent = '✓ ' + this.files[0].name; lbl.style.display = 'block';
+    checkReady();
+  });
+});
+function checkReady() { document.getElementById('run-btn').disabled = !(claimsData && remData); }
+function showErr(msg) { const b = document.getElementById('err-box'); b.textContent = msg; b.style.display = 'block'; }
+function hideErr()    { document.getElementById('err-box').style.display = 'none'; }
+
+// ─── COLUMN FINDER ────────────────────────────────────────────────
+function findCol(headers, kws) {
+  const n = s => String(s||'').toLowerCase().replace(/[\s_\.\-]/g,'');
+  const nh = headers.map(n);
+  for (const kw of kws) { const i = nh.findIndex(h => h.includes(n(kw))); if (i >= 0) return headers[i]; }
+  return null;
+}
+
+// ─── RECONCILIATION ───────────────────────────────────────────────
+function runReconciliation() {
+  hideErr();
+  const cRows = claimsData, rRows = remData.rows, meta = remData.meta;
+  if (!cRows.length || !rRows.length) { showErr('One of the files appears to be empty.'); return; }
+
+  const cH = Object.keys(cRows[0]), rH = Object.keys(rRows[0]);
+  const CC = {
+    trip:   findCol(cH, ['Trip Number','TripNumber','Trip']),
+    member: findCol(cH, ['Member Info','MemberInfo','Member Name','Member']),
+    driver: findCol(cH, ['Driver','Driver Name']),
+    status: findCol(cH, ['Claim Status','Status']),
+    date:   findCol(cH, ['Appt. Date','Appt Date','Appointment Date','Date']),
+  };
+  const RC = {
+    leg:    findCol(rH, ['Trip Leg','TripLeg','Trip Number','Trip']),
+    amount: findCol(rH, ['Payment Amount','Amount','Pay']),
+    first:  findCol(rH, ['Member First Name','FirstName','First Name']),
+    last:   findCol(rH, ['Member Last Name','LastName','Last Name']),
+    date:   findCol(rH, ['Appt Date','Appointment Date','Appt. Date','Date']),
+    miles:  findCol(rH, ['Trip Miles','Miles']),
+    mode:   findCol(rH, ['Trip Mode','Mode']),
+    plan:   findCol(rH, ['Plan','Insurance Plan','Payer']),
+    code:   findCol(rH, ['Procedure Code','Code']),
+  };
+  if (!RC.leg)    { showErr('Cannot find Trip Leg column in remittance file. Columns: ' + rH.join(', ')); return; }
+  if (!RC.amount) { showErr('Cannot find Payment Amount column in remittance file.'); return; }
+
+  const claimByTrip = {}, claimByMemberDate = {}, claimByMember = {};
+  for (const row of cRows) {
+    const trip   = CC.trip   ? String(row[CC.trip]   || '').trim().toUpperCase() : '';
+    const member = CC.member ? String(row[CC.member] || '').trim().toUpperCase() : '';
+    const date   = CC.date   ? String(row[CC.date]   || '').trim() : '';
+    if (trip)             claimByTrip[trip] = row;
+    if (member && date)   claimByMemberDate[`${member}|${date}`] = row;
+    if (member)           claimByMember[member] = row;
+  }
+
+  const driverMap = {};
+  let totalRemit = 0;
+
+  for (const row of rRows) {
+    const leg  = RC.leg   ? String(row[RC.leg]   || '').trim() : '';
+    const fn   = RC.first ? String(row[RC.first] || '').trim() : '';
+    const ln   = RC.last  ? String(row[RC.last]  || '').trim() : '';
+    const date = RC.date  ? String(row[RC.date]  || '').trim() : '';
+    const plan = RC.plan  ? String(row[RC.plan]  || '').trim() : '';
+    const mode = RC.mode  ? String(row[RC.mode]  || '').trim() : '';
+    let   amt  = 0; try { amt  = parseFloat(String(row[RC.amount]      || '0').replace(/[^0-9.\-]/g,'')) || 0; } catch {}
+    let   mi   = 0; try { mi   = parseFloat(String(row[RC.miles || ''] || '0')) || 0; } catch {}
+    const memberKey = `${fn} ${ln}`.trim().toUpperCase();
+    const claimRow  = claimByTrip[leg.toUpperCase()]
+                   || claimByMemberDate[`${memberKey}|${date}`]
+                   || claimByMember[memberKey]
+                   || null;
+    const driver = claimRow && CC.driver ? String(claimRow[CC.driver] || '').trim() : '';
+    const status = claimRow && CC.status ? String(claimRow[CC.status] || '').trim() : '';
+    const drvKey = driver || 'Unassigned';
+    if (!driverMap[drvKey]) driverMap[drvKey] = { name: drvKey, total: 0, trips: [] };
+    driverMap[drvKey].trips.push({ leg, member: `${fn} ${ln}`.trim(), date, amount: Math.round(amt*100)/100, miles: Math.round(mi*100)/100, plan, mode, status, matched: !!claimRow });
+    driverMap[drvKey].total = Math.round((driverMap[drvKey].total + amt)*100)/100;
+    totalRemit += amt;
+  }
+
+  state = { driverMap, meta, totalRemit: Math.round(totalRemit*100)/100 };
+  renderAll();
+  document.getElementById('hd-total').textContent = fmt(meta.amount || state.totalRemit);
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('results').classList.add('fade-in');
+  setTimeout(() => document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+}
+
+// ─── RENDER ───────────────────────────────────────────────────────
+function renderAll() { renderMetrics(); renderNotice(); renderDriverCards(); renderSummary(); renderMembers(); }
+
+const COLORS = ['sage','cobalt','amber']; const colorMap = {}; let colorIdx = 0;
+function drvColor(name) {
+  if (name === 'Unassigned' || name === 'None') return 'grey';
+  if (!colorMap[name]) { colorMap[name] = COLORS[colorIdx % COLORS.length]; colorIdx++; }
+  return colorMap[name];
+}
+
+function renderMetrics() {
+  const { driverMap, meta, totalRemit } = state;
+  const assigned  = Object.keys(driverMap).filter(k => k !== 'Unassigned' && k !== 'None');
+  const totalTrips= Object.values(driverMap).reduce((a,d) => a+d.trips.length, 0);
+  const matched   = Object.values(driverMap).reduce((a,d) => a+d.trips.filter(t=>t.matched).length, 0);
+  const unmatched = (driverMap['Unassigned']?.trips?.length || 0);
+  document.getElementById('metrics').innerHTML = [
+    { lbl:'Check Total',      val: fmt(meta.amount || totalRemit), cls:'sage'   },
+    { lbl:'Paid Date',        val: meta.paidDate || '—',           cls:''       },
+    { lbl:'Total Trips',      val: totalTrips,                     cls:''       },
+    { lbl:'Drivers',          val: assigned.length,                cls:'cobalt' },
+    { lbl:'Matched',          val: matched,                        cls:'sage'   },
+    { lbl:'Need Assignment',  val: unmatched,                      cls: unmatched > 0 ? 'amber' : '' },
+  ].map(m => `<div class="met"><div class="met-lbl">${m.lbl}</div><div class="met-val ${m.cls}">${m.val}</div></div>`).join('');
+}
+
+function renderNotice() {
+  const nb = document.getElementById('notice-box');
+  const u  = state.driverMap['Unassigned'];
+  const cnt = u?.trips?.length || 0;
+  if (cnt > 0) { nb.innerHTML = `<strong>${cnt} trip${cnt>1?'s':''} could not be matched to a driver</strong> — ${fmt(u.total)} total. See the "Unassigned" tab for details.`; nb.style.display = 'block'; }
+  else nb.style.display = 'none';
+}
+
+function renderDriverCards() {
+  const q = (document.getElementById('srch')?.value || '').toLowerCase();
+  const { driverMap } = state;
+  const drivers = Object.values(driverMap).sort((a,b) => {
+    if (a.name==='Unassigned') return 1; if (b.name==='Unassigned') return -1; return b.total - a.total;
+  });
+  let html = '';
+  drivers.forEach((d, i) => {
+    const col   = drvColor(d.name);
+    const id    = 'dc'+i;
+    const trips = q ? d.trips.filter(t => t.member.toLowerCase().includes(q) || d.name.toLowerCase().includes(q)) : d.trips;
+    if (q && trips.length === 0) return;
+    const tot = trips.reduce((a,t) => a+t.amount, 0);
+    const avg = trips.length ? tot/trips.length : 0;
+    const ini = d.name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
+    const isU = d.name === 'Unassigned' || d.name === 'None';
+    html += `<div class="driver-card">
+      <div class="dc-head" onclick="toggleCard('${id}')">
+        <div class="dc-av av-${col}">${ini}</div>
+        <div class="dc-info">
+          <div class="dc-name">${d.name}</div>
+          <div class="dc-meta">
+            <span>${trips.length} trip${trips.length!==1?'s':''}</span><span>&bull;</span>
+            <span>avg ${fmt(avg)}/trip</span><span>&bull;</span>
+            ${isU ? `<span class="bdg bdg-amber">needs assignment</span>` : `<span class="bdg bdg-sage">all matched</span>`}
+          </div>
+        </div>
+        <div class="dc-amount">
+          <div class="dc-total ${col}">${fmt(d.total)}</div>
+          <div class="dc-sub">total earned</div>
+        </div>
+        <span class="dc-chv" id="chv-${id}">&#9658;</span>
+      </div>
+      <div class="dc-body" id="body-${id}">
+        <div class="scroll-x">
+          <table class="trip-table">
+            <thead><tr><th>Trip Leg</th><th>Member</th><th>Appt Date</th><th>Miles</th><th>Amount</th><th>Status</th><th>Plan</th></tr></thead>
+            <tbody>${trips.map(t=>`<tr>
+              <td class="mono-cell">${t.leg}</td>
+              <td>${cap(t.member)}</td>
+              <td>${t.date||'—'}</td>
+              <td class="dim-cell">${t.miles?t.miles.toFixed(1)+' mi':'—'}</td>
+              <td class="amt-cell">${fmt(t.amount)}</td>
+              <td>${sbdg(t.status)}</td>
+              <td class="dim-cell">${t.plan||'—'}</td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>
+        <div class="dc-foot">
+          <span>${trips.length} trips &bull; ${trips.filter(t=>t.matched).length} matched</span>
+          <strong>${fmt(tot)}</strong>
+        </div>
+      </div>
+    </div>`;
+  });
+  document.getElementById('cards-container').innerHTML = html || '<div style="text-align:center;padding:40px;color:var(--ink2)">No results match your search.</div>';
+}
+
+function renderSummary() {
+  const { driverMap, meta } = state;
+  const drivers = Object.values(driverMap).filter(d=>d.name!=='Unassigned'&&d.name!=='None').sort((a,b)=>b.total-a.total);
+  document.getElementById('summ-grid').innerHTML = drivers.map(d => {
+    const col     = drvColor(d.name);
+    const members = [...new Set(d.trips.map(t=>cap(t.member)))];
+    const dates   = [...new Set(d.trips.map(t=>t.date))].sort();
+    const totalMi = d.trips.reduce((a,t)=>a+(t.miles||0),0);
+    const ini     = d.name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
+    return `<div class="summ-card">
+      <div class="dc-av av-${col}" style="margin-bottom:12px">${ini}</div>
+      <div class="summ-driver">${d.name}</div>
+      <div class="summ-total">${fmt(d.total)}</div>
+      <div class="summ-detail">
+        <b>Trips:</b> ${d.trips.length}<br>
+        <b>Miles:</b> ${totalMi.toFixed(1)} mi<br>
+        <b>Check:</b> #${meta.check||'—'} &bull; ${meta.paidDate||'—'}<br>
+        <b>Dates:</b> ${dates.join(', ')}<br>
+        <b>Members:</b> ${members.join(', ')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderMembers() {
+  const q = (document.getElementById('msrch')?.value||'').toLowerCase();
+  const u = state.driverMap?.['Unassigned'];
+  if (!u || !u.trips.length) {
+    document.getElementById('mem-tbody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--ink2)">All trips matched ✓</td></tr>';
+    return;
+  }
+  const byM = {};
+  for (const t of u.trips) {
+    if (q && !t.member.toLowerCase().includes(q)) continue;
+    const k = t.member || 'Unknown';
+    if (!byM[k]) byM[k] = { m:k, c:0, tot:0, mi:0, dates:new Set(), p:t.plan };
+    byM[k].c++; byM[k].tot+=t.amount; byM[k].mi+=t.miles; byM[k].dates.add(t.date);
+  }
+  const rows = Object.values(byM).sort((a,b)=>b.tot-a.tot);
+  document.getElementById('mem-tbody').innerHTML = rows.map(r =>
+    `<tr>
+      <td style="font-weight:600">${cap(r.m)}</td>
+      <td>${r.c}</td>
+      <td style="font-family:var(--mono);font-weight:600;color:var(--amber)">${fmt(r.tot)}</td>
+      <td style="color:var(--ink2)">${r.mi.toFixed(1)} mi</td>
+      <td style="color:var(--ink2)">${[...r.dates].join(', ')}</td>
+      <td style="color:var(--ink2);font-size:12px">${r.p}</td>
+    </tr>`
+  ).join('') || '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--ink2)">No results.</td></tr>';
+}
+
+// ─── UTILS ────────────────────────────────────────────────────────
+function toggleCard(id) { document.getElementById('body-'+id).classList.toggle('o'); document.getElementById('chv-'+id).classList.toggle('o'); }
+function expandAll()    { document.querySelectorAll('.dc-body').forEach(el=>el.classList.add('o')); document.querySelectorAll('.dc-chv').forEach(el=>el.classList.add('o')); }
+function collapseAll()  { document.querySelectorAll('.dc-body').forEach(el=>el.classList.remove('o')); document.querySelectorAll('.dc-chv').forEach(el=>el.classList.remove('o')); }
+function switchTab(name, el) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+  document.getElementById('page-'+name).classList.add('on');
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  el.classList.add('on');
+  if (name==='unassigned') renderMembers();
+}
+function fmt(n) { return '$' + parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function cap(s) { return String(s||'').toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()); }
+function sbdg(s) {
+  if (!s) return '<span class="bdg bdg-grey">—</span>';
+  const u = s.toLowerCase();
+  if (u.includes('paid')||u.includes('approved')) return `<span class="bdg bdg-sage">${s}</span>`;
+  if (u.includes('denied')||u.includes('reject'))  return `<span class="bdg bdg-rose">${s}</span>`;
+  return `<span class="bdg bdg-amber">${s}</span>`;
+}
+
+// ─── EXPORT HELPERS ───────────────────────────────────────────────
+function toggleExportMenu(id) { const m=document.getElementById(id); const was=m.classList.contains('open'); closeAllMenus(); if(!was)m.classList.add('open'); }
+function closeAllMenus() { document.querySelectorAll('.export-menu').forEach(m=>m.classList.remove('open')); }
+document.addEventListener('click', e => { if (!e.target.closest('.export-wrap')) closeAllMenus(); });
+
+// ─── CHANGELOG ────────────────────────────────────────────────────
+function openChangelog()  { document.getElementById('changelog-modal').classList.add('open'); }
+function closeChangelog() { document.getElementById('changelog-modal').classList.remove('open'); }
+document.addEventListener('keydown', e => { if (e.key==='Escape') closeChangelog(); });
+
+// ─── CSV EXPORT ───────────────────────────────────────────────────
+function doExportCSV() {
+  if (!state.driverMap) return;
+  const { driverMap, meta } = state;
+  const rows = [['Driver','Trip Leg','Member','Appt Date','Miles','Amount','Status','Plan','Check Number','Paid Date']];
+  const sorted = Object.values(driverMap).sort((a,b)=>{ if(a.name==='Unassigned')return 1; if(b.name==='Unassigned')return -1; return b.total-a.total; });
+  for (const d of sorted) {
+    for (const t of d.trips) rows.push([d.name,t.leg,cap(t.member),t.date,t.miles.toFixed(2),t.amount.toFixed(2),t.status,t.plan,meta.check||'',meta.paidDate||'']);
+    rows.push(['--- Subtotal: '+d.name,'','','','',d.total.toFixed(2),'','','','']);
+    rows.push([]);
+  }
+  const csv = rows.map(r=>r.map(c=>'"'+String(c||'').replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a = document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download=`driver_payments_${meta.check||'export'}.csv`; a.click();
+}
+
+// ─── XLSX EXPORT ──────────────────────────────────────────────────
+function doExportXLSX() {
+  if (!state.driverMap || typeof XLSX==='undefined') return;
+  const { driverMap, meta } = state;
+  const wb = XLSX.utils.book_new();
+  const C  = { sage:'0B6B4C',sageBg:'D6EFE6',cobalt:'1549A0',cobaltBg:'DCE8FB',amber:'7A4708',amberBg:'FDECD0',ink:'111110',white:'FFFFFF',grey:'888880' };
+  const pal=[['sage','sageBg'],['cobalt','cobaltBg'],['amber','amberBg']]; let ci=0; const cmap={};
+  const gc=name=>{ if(name==='Unassigned'||name==='None')return['amber','amberBg']; if(!cmap[name]){cmap[name]=pal[ci%pal.length];ci++;} return cmap[name]; };
+  const hs=(fg,bg,bold=true)=>({font:{name:'Arial',sz:10,bold,color:{rgb:fg}},fill:{fgColor:{rgb:bg},patternType:'solid'},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:{top:{style:'thin',color:{rgb:'CCCCCC'}},bottom:{style:'thin',color:{rgb:'CCCCCC'}},left:{style:'thin',color:{rgb:'CCCCCC'}},right:{style:'thin',color:{rgb:'CCCCCC'}}}});
+  const ds=(fg='111110',bg='FFFFFF',bold=false,right=false)=>({font:{name:'Arial',sz:10,bold,color:{rgb:fg}},fill:{fgColor:{rgb:bg},patternType:'solid'},alignment:{horizontal:right?'right':'left',vertical:'center'},border:{bottom:{style:'thin',color:{rgb:'EEEEEE'}}}});
+  const nf='$#,##0.00';
+  const sorted=Object.values(driverMap).sort((a,b)=>{ if(a.name==='Unassigned')return 1; if(b.name==='Unassigned')return -1; return b.total-a.total; });
+
+  // Summary sheet
+  const sr=[];
+  sr.push([{v:`Erta Ale LLC — Driver Payment Breakdown`,s:hs('FFFFFF',C.ink)},null,null,null,null,null]);
+  sr.push([{v:`Check #${meta.check||'—'}  ·  Paid ${meta.paidDate||'—'}  ·  Total $${(meta.amount||0).toFixed(2)}`,s:{font:{name:'Arial',sz:10,color:{rgb:C.grey}},fill:{fgColor:{rgb:'1E1D1A'},patternType:'solid'},alignment:{horizontal:'center'}}},null,null,null,null,null]);
+  sr.push([]);
+  sr.push([{v:'Driver',s:hs('FFFFFF','333330')},{v:'Trips',s:hs('FFFFFF','333330')},{v:'Total Earned',s:hs('FFFFFF','333330')},{v:'Avg/Trip',s:hs('FFFFFF','333330')},{v:'Members',s:hs('FFFFFF','333330')},{v:'Date Range',s:hs('FFFFFF','333330')}]);
+  for(const d of sorted){const[fk,bk]=gc(d.name);const fg=C[fk],bg=C[bk];const avg=d.trips.length?d.total/d.trips.length:0;const mems=[...new Set(d.trips.map(t=>cap(t.member)))].join(', ');const dates=[...new Set(d.trips.map(t=>t.date))].sort();const dr=dates.length>1?`${dates[0]} — ${dates[dates.length-1]}`:(dates[0]||'—');sr.push([{v:d.name,s:ds(fg,bg,true)},{v:d.trips.length,s:ds(fg,bg)},{v:d.total,s:{...ds(fg,bg,true,true),z:nf}},{v:avg,s:{...ds(C.ink,bg,false,true),z:nf}},{v:mems,s:ds(C.ink,bg)},{v:dr,s:ds(C.ink,bg)}]);}
+  const gt=sorted.reduce((a,d)=>a+d.total,0);const gtc=sorted.reduce((a,d)=>a+d.trips.length,0);
+  sr.push([{v:'GRAND TOTAL',s:hs('FFFFFF',C.ink)},{v:gtc,s:{...hs('FFFFFF',C.ink),alignment:{horizontal:'right',vertical:'center'}}},{v:gt,s:{...hs('7EF0C0',C.ink),alignment:{horizontal:'right',vertical:'center'},z:nf}},{v:'',s:hs('FFFFFF',C.ink)},{v:'',s:hs('FFFFFF',C.ink)},{v:'',s:hs('FFFFFF',C.ink)}]);
+  const sws=XLSX.utils.aoa_to_sheet(sr);sws['!cols']=[{wch:26},{wch:8},{wch:14},{wch:12},{wch:40},{wch:22}];sws['!merges']=[{s:{r:0,c:0},e:{r:0,c:5}},{s:{r:1,c:0},e:{r:1,c:5}}];XLSX.utils.book_append_sheet(wb,sws,'Summary');
+
+  // All Trips sheet
+  const ar=[];
+  ar.push([{v:`All Trips — Check #${meta.check||'—'}  ·  Paid ${meta.paidDate||'—'}`,s:hs('FFFFFF',C.ink)},null,null,null,null,null,null,null]);
+  ar.push([{v:'Driver',s:hs('FFFFFF','333330')},{v:'Trip Leg',s:hs('FFFFFF','333330')},{v:'Member',s:hs('FFFFFF','333330')},{v:'Appt Date',s:hs('FFFFFF','333330')},{v:'Miles',s:hs('FFFFFF','333330')},{v:'Amount',s:hs('FFFFFF','333330')},{v:'Status',s:hs('FFFFFF','333330')},{v:'Plan',s:hs('FFFFFF','333330')}]);
+  for(const d of sorted){const[fk,bk]=gc(d.name);const fg=C[fk],bg=C[bk];for(const t of d.trips.slice().sort((a,b)=>a.date.localeCompare(b.date))){ar.push([{v:d.name,s:ds(fg,bg,true)},{v:t.leg,s:ds(C.ink,'FFFFFF')},{v:cap(t.member),s:ds(C.ink,'FFFFFF')},{v:t.date,s:ds(C.ink,'FFFFFF')},{v:t.miles,s:{...ds(C.ink,'FFFFFF'),alignment:{horizontal:'right',vertical:'center'}}},{v:t.amount,s:{...ds(fg,'FFFFFF',true,true),z:nf}},{v:t.status,s:ds(C.ink,'FFFFFF')},{v:t.plan,s:ds(C.grey,'FFFFFF')}]);}ar.push([{v:`  Subtotal — ${d.name}`,s:{...ds(fg,bg,true)}},{v:'',s:ds(fg,bg)},{v:'',s:ds(fg,bg)},{v:'',s:ds(fg,bg)},{v:'',s:ds(fg,bg)},{v:d.total,s:{...ds(fg,bg,true,true),z:nf}},{v:'',s:ds(fg,bg)},{v:'',s:ds(fg,bg)}]);ar.push([]);}
+  ar.push([{v:'GRAND TOTAL',s:hs('FFFFFF',C.ink)},null,null,null,null,{v:gt,s:{...hs('7EF0C0',C.ink),alignment:{horizontal:'right',vertical:'center'},z:nf}},null,null]);
+  const aws=XLSX.utils.aoa_to_sheet(ar);aws['!cols']=[{wch:26},{wch:16},{wch:22},{wch:11},{wch:8},{wch:13},{wch:10},{wch:36}];aws['!merges']=[{s:{r:0,c:0},e:{r:0,c:7}}];XLSX.utils.book_append_sheet(wb,aws,'All Trips');
+
+  // Per-driver sheets
+  for(const d of sorted){const[fk,bk]=gc(d.name);const fg=C[fk],bg=C[bk];const sn=d.name.trim().replace(/\s+/g,' ').slice(0,28);const dr=[];dr.push([{v:d.name.trim(),s:hs('FFFFFF',fg)},null,null,null,null,null,null]);dr.push([{v:`Check #${meta.check||'—'}  ·  Paid ${meta.paidDate||'—'}  ·  ${d.trips.length} trips  ·  Total $${d.total.toFixed(2)}`,s:{font:{name:'Arial',sz:10,color:{rgb:C.grey}},fill:{fgColor:{rgb:bg},patternType:'solid'},alignment:{horizontal:'center'}}},null,null,null,null,null,null]);dr.push([]);dr.push([{v:'Trip Leg',s:hs('FFFFFF',fg)},{v:'Member',s:hs('FFFFFF',fg)},{v:'Appt Date',s:hs('FFFFFF',fg)},{v:'Miles',s:hs('FFFFFF',fg)},{v:'Amount',s:hs('FFFFFF',fg)},{v:'Status',s:hs('FFFFFF',fg)},{v:'Plan',s:hs('FFFFFF',fg)}]);let alt=false;for(const t of d.trips.slice().sort((a,b)=>a.date.localeCompare(b.date))){const rb=alt?bg:'FFFFFF';alt=!alt;dr.push([{v:t.leg,s:ds(C.ink,rb)},{v:cap(t.member),s:ds(C.ink,rb)},{v:t.date,s:ds(C.ink,rb)},{v:t.miles,s:{...ds(C.ink,rb),alignment:{horizontal:'right',vertical:'center'}}},{v:t.amount,s:{...ds(fg,rb,true,true),z:nf}},{v:t.status,s:ds(C.ink,rb)},{v:t.plan,s:ds(C.grey,rb)}]);}dr.push([{v:'TOTAL',s:hs('FFFFFF',fg)},null,null,null,{v:d.total,s:{...hs('FFFFFF',fg),alignment:{horizontal:'right',vertical:'center'},z:nf}},null,null]);const dws=XLSX.utils.aoa_to_sheet(dr);dws['!cols']=[{wch:16},{wch:22},{wch:11},{wch:8},{wch:13},{wch:10},{wch:36}];dws['!merges']=[{s:{r:0,c:0},e:{r:0,c:6}},{s:{r:1,c:0},e:{r:1,c:6}}];XLSX.utils.book_append_sheet(wb,dws,sn);}
+
+  XLSX.writeFile(wb, `driver_payments_${meta.check||'export'}.xlsx`);
+}
+</script>
+</body>
+</html>
